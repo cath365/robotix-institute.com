@@ -8,9 +8,11 @@
     "dev:windows": "npm run clean && node --require ./readlink-patch.js ./node_modules/next/dist/bin/next dev",
     "build": "next build",
     "start": "next start",
+    "postinstall": "prisma generate",
     "lint": "next lint",
     "arduino:bridge": "node tools/robotix-arduino-bridge/bridge.mjs",
     "db:push": "prisma db push",
+    "db:migrate": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate"
