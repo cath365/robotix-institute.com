@@ -1,0 +1,926 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── User & Auth ────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  ACCOUNTANT
+  INSTRUCTOR
+  STUDENT
+  GUEST
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  firstName     String
+  lastName      String
+  role          Role      @default(STUDENT)
+  avatar        String?
+  bio           String?
+  githubUrl     String?
+  linkedinUrl   String?
+  isActive      Boolean   @default(true)
+  emailVerified Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  enrollments     Enrollment[]
+  submissions     Assignment[]
+  quizAttempts    QuizAttempt[]
+  certificates    Certificate[]
+  codeProjects    CodeProject[]
+  robotProjects   RobotProject[]
+  forumPosts      ForumPost[]
+  forumComments   ForumComment[]
+  gameScores      GameScore[]
+  achievements    UserAchievement[]
+  teamMembers     TeamMember[]
+  orders          Order[]
+  iotDevices      IoTDevice[]
+  portfolio       Portfolio?
+  instructorCourses Course[]  @relation("CourseInstructor")
+  competitionJudgings CompetitionSubmission[] @relation("Judge")
+  notifications        Notification[]
+  pathEnrollments      PathEnrollment[]
+  blogPosts            BlogPost[]
+  blogComments         BlogComment[]
+  gameProjects         GameProject[]
+  gameProjectLikes     GameProjectLike[]
+  teamChatMessages     TeamChatMessage[]
+  teamCalendarEvents   TeamCalendarEvent[]
+  assignedTeamCalendarEvents TeamCalendarEvent[] @relation("TeamCalendarAssignee")
+  teamRequests         TeamRequest[]
+  sentTeamInvites      TeamInvite[] @relation("TeamInviteInviter")
+  gamificationLogs     GamificationLog[]
+  passwordResetTokens  PasswordResetToken[]
+  assignedContactMessages ContactMessage[] @relation("ContactMessageAssignee")
+  assignedWeekendClassLeads WeekendClassLead[] @relation("WeekendClassLeadAssignee")
+
+  /// Total lifetime points — used for all-time leaderboard and badges.
+  points Int @default(0)
+
+  @@index([email])
+  @@index([role])
+  @@index([points(sort: Desc)])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String?
+  message   String
+  status    String   @default("NEW")
+  adminNotes String?
+  assignedToId String?
+  source    String   @default("website-contact-form")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignedTo User? @relation("ContactMessageAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([email])
+  @@index([assignedToId])
+}
+
+model WeekendClassLead {
+  id                String   @id @default(cuid())
+  parentName        String
+  parentEmail       String
+  parentPhone       String
+  childName         String
+  childAge          String
+  childSchool       String?
+  preferredTrack    String
+  preferredSchedule String
+  notes             String?
+  status            String   @default("NEW")
+  adminNotes        String?
+  assignedToId      String?
+  source            String   @default("weekend-classes-page")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  assignedTo User? @relation("WeekendClassLeadAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([parentEmail])
+  @@index([assignedToId])
+}
+
+// ─── Course & LMS ───────────────────────────────────────────
+
+model Course {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  description String
+  thumbnail   String?
+  price       Float    @default(0)
+  level       String   @default("beginner") // beginner, intermediate, advanced
+  category    String
+  duration    Int      @default(0) // total minutes
+  published   Boolean  @default(false)
+  featured    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  instructorId String
+  instructor   User     @relation("CourseInstructor", fields: [instructorId], references: [id])
+
+  modules     CourseModule[]
+  enrollments Enrollment[]
+
+  @@index([slug])
+  @@index([category])
+}
+
+model CourseModule {
+  id       String @id @default(cuid())
+  title    String
+  order    Int
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  lessons Lesson[]
+
+  @@index([courseId])
+}
+
+model Lesson {
+  id          String  @id @default(cuid())
+  title       String
+  content     String // markdown
+  videoUrl    String?
+  duration    Int     @default(0) // minutes
+  order       Int
+  type        String  @default("video") // video, text, quiz, assignment
+
+  moduleId String
+  module   CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  quiz       Quiz?
+  assignment AssignmentDef?
+  progress   LessonProgress[]
+
+  @@index([moduleId])
+}
+
+model Enrollment {
+  id        String   @id @default(cuid())
+  userId    String
+  courseId   String
+  progress  Float    @default(0)
+  completed Boolean  @default(false)
+  enrolledAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  course Course @relation(fields: [courseId], references: [id])
+
+  @@unique([userId, courseId])
+}
+
+model LessonProgress {
+  id        String   @id @default(cuid())
+  userId    String
+  lessonId  String
+  completed Boolean  @default(false)
+  watchTime Int      @default(0) // seconds
+  completedAt DateTime?
+
+  lesson Lesson @relation(fields: [lessonId], references: [id])
+
+  @@unique([userId, lessonId])
+}
+
+model Quiz {
+  id       String @id @default(cuid())
+  lessonId String @unique
+  lesson   Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+}
+
+model QuizQuestion {
+  id            String   @id @default(cuid())
+  question      String
+  options       String[] // JSON array of options
+  correctAnswer Int      // index of correct option
+  points        Int      @default(1)
+  order         Int
+  quizId        String
+  quiz          Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@index([quizId])
+}
+
+model QuizAttempt {
+  id        String   @id @default(cuid())
+  userId    String
+  quizId    String
+  score     Float
+  answers   String   // JSON string of answers
+  passed    Boolean
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  quiz Quiz @relation(fields: [quizId], references: [id])
+
+  @@index([userId, quizId])
+}
+
+model AssignmentDef {
+  id          String @id @default(cuid())
+  lessonId    String @unique
+  lesson      Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  description String
+  maxScore    Int    @default(100)
+  dueDate     DateTime?
+
+  submissions Assignment[]
+}
+
+model Assignment {
+  id           String   @id @default(cuid())
+  userId       String
+  assignmentId String
+  content      String
+  fileUrl      String?
+  score        Int?
+  feedback     String?
+  status       String   @default("submitted") // submitted, graded, returned
+  submittedAt  DateTime @default(now())
+
+  user       User          @relation(fields: [userId], references: [id])
+  assignment AssignmentDef @relation(fields: [assignmentId], references: [id])
+
+  @@index([userId, assignmentId])
+}
+
+model Certificate {
+  id        String   @id @default(cuid())
+  userId    String
+  courseId   String
+  title     String
+  issueDate DateTime @default(now())
+  certUrl   String?
+  certCode  String   @unique @default(cuid())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([certCode])
+  @@index([courseId])
+}
+
+// ─── Code Playground ────────────────────────────────────────
+
+model CodeProject {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  language  String   // python, javascript, cpp, arduino, micropython
+  code      String
+  isPublic  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([language])
+}
+
+// ─── Robotics Projects ──────────────────────────────────────
+
+model RobotProject {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  slug        String   @unique
+  description String
+  components  String   // JSON array
+  circuitUrl  String?
+  sourceCode  String?
+  tutorialMd  String?  // markdown tutorial
+  videoUrl    String?
+  thumbnail   String?
+  category    String
+  difficulty  String   @default("beginner")
+  isPublished Boolean  @default(false)
+  likes       Int      @default(0)
+  views       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([slug])
+  @@index([category])
+}
+
+// ─── IoT Robot Control ──────────────────────────────────────
+
+model IoTDevice {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  deviceType  String   // esp32, arduino, raspberry_pi
+  mqttTopic   String   @unique
+  status      String   @default("offline") // online, offline, busy
+  lastSeen    DateTime?
+  sensorData  String?  // JSON
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([mqttTopic])
+}
+
+// ─── Game Arena ─────────────────────────────────────────────
+
+model Game {
+  id          String @id @default(cuid())
+  name        String
+  slug        String @unique
+  description String
+  type        String // maze, line_follower, drone_nav, robot_soccer
+  thumbnail   String?
+  difficulty  String @default("easy")
+  maxScore    Int    @default(1000)
+
+  scores GameScore[]
+  levels GameLevel[]
+
+  @@index([slug])
+}
+
+model GameLevel {
+  id         String @id @default(cuid())
+  gameId     String
+  game       Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  levelNum   Int
+  name       String
+  config     String // JSON config for the level
+  maxScore   Int    @default(100)
+
+  @@unique([gameId, levelNum])
+}
+
+model GameScore {
+  id        String   @id @default(cuid())
+  userId    String
+  gameId    String
+  score     Int
+  level     Int      @default(1)
+  time      Int?     // seconds to complete
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  game Game @relation(fields: [gameId], references: [id])
+
+  @@index([gameId, score])
+  @@index([userId])
+}
+
+model Achievement {
+  id          String @id @default(cuid())
+  name        String
+  description String
+  icon        String
+  category    String // coding, robotics, competition, community
+  points      Int    @default(10)
+  criteria    String // JSON criteria
+
+  users UserAchievement[]
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String
+  earnedAt      DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id])
+  achievement Achievement @relation(fields: [achievementId], references: [id])
+
+  @@unique([userId, achievementId])
+}
+
+// ─── Competitions ───────────────────────────────────────────
+
+model Competition {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  description String
+  rules       String
+  startDate   DateTime
+  endDate     DateTime
+  status      String   @default("upcoming") // upcoming, active, judging, completed
+  maxTeamSize Int      @default(4)
+  thumbnail   String?
+  prizes      String?  // JSON
+  createdAt   DateTime @default(now())
+
+  teams       Team[]
+  submissions CompetitionSubmission[]
+
+  @@index([slug])
+  @@index([status])
+}
+
+model Team {
+  id            String @id @default(cuid())
+  name          String
+  competitionId String
+  competition   Competition @relation(fields: [competitionId], references: [id])
+
+  members     TeamMember[]
+  submissions CompetitionSubmission[]
+
+  @@unique([name, competitionId])
+}
+
+model TeamMember {
+  id     String @id @default(cuid())
+  userId String
+  teamId String
+  role   String @default("member") // leader, member
+
+  user User @relation(fields: [userId], references: [id])
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+}
+
+model CompetitionSubmission {
+  id            String   @id @default(cuid())
+  teamId        String
+  competitionId String
+  title         String
+  description   String
+  videoUrl      String?
+  repoUrl       String?
+  fileUrl       String?
+  score         Float?
+  feedback      String?
+  judgedById    String?
+  status        String   @default("submitted") // submitted, under_review, judged
+  submittedAt   DateTime @default(now())
+
+  team        Team        @relation(fields: [teamId], references: [id])
+  competition Competition @relation(fields: [competitionId], references: [id])
+  judgedBy    User?       @relation("Judge", fields: [judgedById], references: [id])
+
+  @@index([competitionId])
+  @@index([teamId])
+}
+
+// ─── Student Portfolio ──────────────────────────────────────
+
+model Portfolio {
+  id        String @id @default(cuid())
+  userId    String @unique
+  headline  String?
+  about     String?
+  skills    String[] // array of skills
+  website   String?
+  isPublic  Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id])
+  items PortfolioItem[]
+}
+
+model PortfolioItem {
+  id          String   @id @default(cuid())
+  portfolioId String
+  title       String
+  description String
+  type        String   // project, certificate, achievement, code
+  imageUrl    String?
+  linkUrl     String?
+  date        DateTime @default(now())
+
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioId])
+}
+
+// ─── Marketplace ────────────────────────────────────────────
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String
+  price       Float
+  salePrice   Float?
+  category    String
+  thumbnail   String?
+  images      String[] // array of image URLs
+  stock       Int      @default(0)
+  featured    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  specs       String?  // JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orderItems OrderItem[]
+
+  @@index([slug])
+  @@index([category])
+}
+
+model Order {
+  id        String   @id @default(cuid())
+  userId    String
+  total     Float
+  status    String   @default("pending") // pending, confirmed, shipped, delivered
+  paymentStatus String @default("PENDING") // PENDING, PARTIAL, PAID, WAIVED, REFUNDED
+  paymentMethod String?
+  amountPaid Float @default(0)
+  paymentReference String?
+  accountsNotes String?
+  paidAt DateTime?
+  address   String
+  phone     String
+  createdAt DateTime @default(now())
+
+  user  User        @relation(fields: [userId], references: [id])
+  items OrderItem[]
+  paymentProofs PaymentProof[]
+
+  @@index([userId])
+  @@index([paymentStatus])
+}
+
+model PaymentProof {
+  id          String   @id @default(cuid())
+  orderId     String?
+  parentName  String
+  parentEmail String
+  parentPhone String
+  amount      Float
+  method      String
+  reference   String?
+  note        String?
+  status      String   @default("PENDING") // PENDING, VERIFIED, REJECTED
+  proofDataUrl String?
+  proofMime    String?
+  proofName    String?
+  proofSize    Int?
+  verifiedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([parentEmail])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int
+  price     Float
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+}
+
+// ─── Community & Forum ──────────────────────────────────────
+
+model ForumCategory {
+  id          String @id @default(cuid())
+  name        String
+  slug        String @unique
+  description String
+  icon        String?
+  order       Int    @default(0)
+
+  posts ForumPost[]
+}
+
+model ForumPost {
+  id         String   @id @default(cuid())
+  userId     String
+  categoryId String
+  title      String
+  content    String
+  isPinned   Boolean  @default(false)
+  views      Int      @default(0)
+  likes      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id])
+  category ForumCategory @relation(fields: [categoryId], references: [id])
+  comments ForumComment[]
+
+  @@index([categoryId])
+  @@index([userId])
+}
+
+model ForumComment {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  content   String
+  likes     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user User      @relation(fields: [userId], references: [id])
+  post ForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+}
+
+// ─── Notifications ──────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // achievement, course, competition, forum, order, system
+  title     String
+  message   String
+  link      String?  // URL to navigate to
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([createdAt])
+}
+
+// ─── Learning Paths ─────────────────────────────────────────
+
+model LearningPath {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  description String
+  thumbnail   String?
+  difficulty  String   @default("beginner") // beginner, intermediate, advanced
+  category    String
+  duration    Int      @default(0) // estimated total hours
+  published   Boolean  @default(false)
+  featured    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  steps        LearningPathStep[]
+  enrollments  PathEnrollment[]
+
+  @@index([slug])
+  @@index([category])
+}
+
+model LearningPathStep {
+  id             String @id @default(cuid())
+  learningPathId String
+  order          Int
+  title          String
+  description    String
+  type           String // course, project, quiz, challenge
+  resourceId     String? // ID of the linked course/project/etc
+  resourceUrl    String? // external URL if applicable
+  duration       Int     @default(0) // estimated minutes
+
+  learningPath LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+
+  @@index([learningPathId])
+  @@unique([learningPathId, order])
+}
+
+model PathEnrollment {
+  id             String   @id @default(cuid())
+  userId         String
+  learningPathId String
+  currentStep    Int      @default(0)
+  completed      Boolean  @default(false)
+  startedAt      DateTime @default(now())
+  completedAt    DateTime?
+
+  user         User         @relation(fields: [userId], references: [id])
+  learningPath LearningPath @relation(fields: [learningPathId], references: [id])
+
+  @@unique([userId, learningPathId])
+}
+
+// ─── Blog / News ────────────────────────────────────────────
+
+model BlogPost {
+  id          String   @id @default(cuid())
+  authorId    String
+  title       String
+  slug        String   @unique
+  excerpt     String
+  content     String   // markdown
+  thumbnail   String?
+  category    String   // news, tutorial, industry, event, announcement
+  tags        String[] // array of tags
+  published   Boolean  @default(false)
+  featured    Boolean  @default(false)
+  views       Int      @default(0)
+  likes       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author   User          @relation(fields: [authorId], references: [id])
+  comments BlogComment[]
+
+  @@index([slug])
+  @@index([category])
+  @@index([authorId])
+}
+
+model BlogComment {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  user User     @relation(fields: [userId], references: [id])
+  post BlogPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+}
+
+// ─── Game Lab (student-built games) ────────────────────────
+
+enum GameProjectStatus {
+  DRAFT       // private, only owner can see / edit
+  PENDING     // submitted for review by an admin
+  PUBLISHED   // approved & visible in public gallery
+  REJECTED    // admin rejected with feedback
+}
+
+model GameProject {
+  id          String            @id @default(cuid())
+  userId      String
+  title       String
+  slug        String            @unique
+  description String            @default("")
+  // The user-authored Phaser source. Stored as text so it can be edited
+  // and replayed verbatim. Validated/length-limited by the API.
+  code        String
+  // Optional starter-template id this project was forked from.
+  templateId  String?
+  thumbnail   String?
+  // Lightweight tag list, comma-separated for portability.
+  tags        String            @default("")
+  status      GameProjectStatus @default(DRAFT)
+  rejectionReason String?
+  playCount   Int               @default(0)
+  likeCount   Int               @default(0)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  publishedAt DateTime?
+
+  user  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes GameProjectLike[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([slug])
+}
+
+/// Immutable audit trail of point changes (lesson complete, publishes, badges, …).
+model GamificationLog {
+  id        String   @id @default(cuid())
+  userId    String
+  delta     Int
+  reason    String // e.g. lesson_complete | game_published | admin_award
+  meta      String? // optional JSON blob
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// One like per user per game; lets us derive the leaderboard fairly.
+model GameProjectLike {
+  id            String   @id @default(cuid())
+  userId        String
+  gameProjectId String
+  createdAt     DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameProject GameProject @relation(fields: [gameProjectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameProjectId])
+  @@index([gameProjectId])
+}
+
+model TeamChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([userId])
+}
+
+model TeamCalendarEvent {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  location    String?
+  duty        String?
+  assignedToId String?
+  startsAt    DateTime
+  endsAt      DateTime
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  assignedTo User? @relation("TeamCalendarAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([startsAt])
+  @@index([createdById])
+  @@index([assignedToId])
+}
+
+model TeamInvite {
+  id          String   @id @default(cuid())
+  email       String
+  firstName   String
+  lastName    String
+  role        Role
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  invitedById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  invitedBy User @relation("TeamInviteInviter", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([role])
+  @@index([expiresAt])
+}
+
+model TeamRequest {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  details   String
+  priority  String   @default("NORMAL") // LOW, NORMAL, URGENT
+  status    String   @default("OPEN") // OPEN, REVIEWING, APPROVED, DONE, REJECTED
+  response  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
+}
