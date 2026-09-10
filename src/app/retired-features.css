@@ -1,0 +1,22 @@
+/* Hide navigation and cross-links for platform features retired from Robotix Institute. */
+a[href="/ai-tutor"],
+a[href^="/ai-tutor/"],
+a[href="/accounts"],
+a[href^="/accounts/"],
+a[href="/team"],
+a[href^="/team#"],
+a[href^="/team/"],
+a[href="/invite"],
+a[href^="/invite/"],
+a[href="/blog"],
+a[href^="/blog/"],
+a[href="/game-lab"],
+a[href^="/game-lab/"],
+a[href="/game-gallery"],
+a[href^="/game-gallery/"],
+a[href="/play"],
+a[href^="/play/"],
+a[href="/arena"],
+a[href^="/arena/"] {
+  display: none !important;
+}
