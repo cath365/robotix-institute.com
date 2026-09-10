@@ -54,7 +54,7 @@ export default function AdminLoginPage() {
         <div className="my-auto w-full max-w-md py-14">
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#2478f3]">Administration portal</p>
           <h2 className="mt-4 font-serif text-4xl text-[#102744]">Admin sign in.</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-600">Use the Firebase account authorised by Robotix Institute.</p>
+          <p className="mt-3 text-sm leading-6 text-slate-600">Use an authorised Robotix Institute administrator account.</p>
           {error && <div role="alert" className="mt-6 border-l-4 border-red-700 bg-red-50 p-4 text-sm text-red-800">{error}</div>}
           <form onSubmit={handleSubmit} className="mt-8 space-y-6">
             <label className="block text-xs font-bold uppercase tracking-[0.12em] text-slate-700">Admin email<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} className={inputClass} required /></label>
