@@ -25,6 +25,18 @@ interface FetchOptions extends RequestInit {
   requireAuth?: boolean;
 }
 
+async function parseApiJson(response: Response) {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await response.text();
+    const preview = text.replace(/\s+/g, ' ').slice(0, 120);
+    throw new Error(
+      `Server returned ${response.status} ${response.statusText} instead of JSON.${preview ? ` Response: ${preview}` : ''}`
+    );
+  }
+  return response.json();
+}
+
 export function useApi() {
   const { token, logout } = useAuthStore();
   const router = useRouter();
@@ -53,7 +65,7 @@ export function useApi() {
         throw new Error('Unauthorized');
       }
 
-      const data = await response.json();
+      const data = await parseApiJson(response);
 
       if (!response.ok) {
         throw new Error(data.message || data.error || 'An error occurred');
@@ -64,30 +76,26 @@ export function useApi() {
     [token, logout, router]
   );
 
-  // GET request helper
   const get = useCallback(
-    <T = unknown>(endpoint: string, options?: FetchOptions) => 
+    <T = unknown>(endpoint: string, options?: FetchOptions) =>
       fetchApi<T>(endpoint, { ...options, method: 'GET' }),
     [fetchApi]
   );
 
-  // POST request helper
   const post = useCallback(
-    <T = unknown>(endpoint: string, body: unknown, options?: FetchOptions) => 
+    <T = unknown>(endpoint: string, body: unknown, options?: FetchOptions) =>
       fetchApi<T>(endpoint, { ...options, method: 'POST', body: JSON.stringify(body) }),
     [fetchApi]
   );
 
-  // PATCH request helper
   const patch = useCallback(
-    <T = unknown>(endpoint: string, body: unknown, options?: FetchOptions) => 
+    <T = unknown>(endpoint: string, body: unknown, options?: FetchOptions) =>
       fetchApi<T>(endpoint, { ...options, method: 'PATCH', body: JSON.stringify(body) }),
     [fetchApi]
   );
 
-  // DELETE request helper
   const del = useCallback(
-    <T = unknown>(endpoint: string, options?: FetchOptions) => 
+    <T = unknown>(endpoint: string, options?: FetchOptions) =>
       fetchApi<T>(endpoint, { ...options, method: 'DELETE' }),
     [fetchApi]
   );
@@ -101,14 +109,32 @@ export function useAuth() {
 
   const handleLogin = async (email: string, password: string, options?: { adminOnly?: boolean }) => {
     try {
+      if (options?.adminOnly) {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await parseApiJson(res);
+        if (!res.ok) throw new Error(data.message || data.error || 'Administrator sign in failed');
+
+        if (data?.data?.user?.role !== 'ADMIN') {
+          await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+          throw new Error('This account does not have administrator access.');
+        }
+
+        storeLogin(data.data.user, data.data.token);
+        return data.data;
+      }
+
       const credential = await signInWithFirebaseEmail(email, password);
       const idToken = await credential.user.getIdToken(true);
       const res = await fetch('/api/auth/firebase-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken, adminOnly: options?.adminOnly === true }),
+        body: JSON.stringify({ idToken, adminOnly: false }),
       });
-      const data = await res.json();
+      const data = await parseApiJson(res);
       if (!res.ok) throw new Error(data.message || data.error || 'Login failed');
       storeLogin(data.data.user, data.data.token);
       return data.data;
@@ -132,7 +158,7 @@ export function useAuth() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ idToken }),
     });
-    const data = await res.json();
+    const data = await parseApiJson(res);
     if (!res.ok) throw new Error(data.message || data.error || 'Registration failed');
     storeLogin(data.data.user, data.data.token);
     return data.data;
@@ -157,7 +183,7 @@ export function useAuth() {
       const res = await fetch('/api/auth/me', {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
+      const data = await parseApiJson(res);
       if (res.ok && data.data) {
         updateUser(data.data);
         return data.data;
@@ -180,7 +206,6 @@ export function useAuth() {
   };
 }
 
-// Hook for paginated data
 export function usePaginatedData<T>(endpoint: string) {
   const { get } = useApi();
   const [data, setData] = useState<T[]>([]);
