@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\"",
-    "dev": "npm run clean && node --require ./readlink-patch.js ./node_modules/next/dist/bin/next dev",
-    "build": "node --require ./readlink-patch.js ./node_modules/next/dist/bin/next build",
-    "start": "node --require ./readlink-patch.js ./node_modules/next/dist/bin/next start",
+    "dev": "npm run clean && next dev",
+    "dev:windows": "npm run clean && node --require ./readlink-patch.js ./node_modules/next/dist/bin/next dev",
+    "build": "next build",
+    "start": "next start",
     "lint": "next lint",
     "arduino:bridge": "node tools/robotix-arduino-bridge/bridge.mjs",
     "db:push": "prisma db push",
