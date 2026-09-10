@@ -1,5 +1,6 @@
 'use client';
 
+import './retired-features.css';
 import { PageTransition } from '@/components/ui/PageTransition';
 
 export default function Template({ children }: { children: React.ReactNode }) {
